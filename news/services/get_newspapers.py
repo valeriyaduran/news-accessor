@@ -1,5 +1,6 @@
 import asyncio
 import json
+from asyncio import Semaphore
 from datetime import datetime
 
 from aiohttp import ClientSession, TCPConnector
@@ -38,31 +39,35 @@ class Newspaper:
                         await self.parse_news_page_to_get_news_urls()
         return self.news_urls
 
-    async def get_image_urls(self, news_url) -> dict:
-        async with ClientSession(connector=TCPConnector(ssl=False)) as session:
-            async with session.get(url=news_url) as response:
-                page_content = await response.text()
-                soup = BeautifulSoup(page_content, "html.parser")
-                script_tag_data = soup.select("script:contains('editions')")
-                for tag in script_tag_data:
-                    text_in_tag = tag.text
-                    summary_data = \
-                    json.loads("{" + "{".join(text_in_tag.split("{")[1:]).replace(text_in_tag.split("}")[-1], ""))[
-                        "summary_data"]
-                    for data in summary_data:
-                        try:
-                            for edition in data["editions"]:
-                                self.news_urls[news_url].update({"img_url": edition["img_url"]})
-                                self.news_urls[news_url].update({"date": datetime.strptime(edition["date"],
-                                                                                           "%Y%m%d").date()})
-                                await insert_newspapers_data_into_news_db(newspaper_data=self.news_urls[news_url])
-                        except KeyError:
-                            pass
+    async def get_image_urls(self, news_url: str, semaphore: Semaphore) -> dict:
+        async with semaphore:
+            async with ClientSession(connector=TCPConnector(ssl=False)) as session:
+                async with session.get(url=news_url) as response:
+                    page_content = await response.text()
+                    soup = BeautifulSoup(page_content, "html.parser")
+                    script_tag_data = soup.select("script:contains('editions')")
+                    for tag in script_tag_data:
+                        text_in_tag = tag.text
+                        summary_data = \
+                            json.loads(
+                                "{" + "{".join(text_in_tag.split("{")[1:]).replace(text_in_tag.split("}")[-1], ""))[
+                                "summary_data"]
+                        for data in summary_data:
+                            try:
+                                for edition in data["editions"]:
+                                    self.news_urls[news_url].update({"img_url": edition["img_url"]})
+                                    self.news_urls[news_url].update({"date": datetime.strptime(edition["date"],
+                                                                                               "%Y%m%d").date()})
+                                    await insert_newspapers_data_into_news_db(newspaper_data=self.news_urls[news_url])
+                            except KeyError:
+                                pass
         return self.news_urls
 
     async def main(self) -> dict:
+        semaphore = asyncio.Semaphore(value=100)
         await self.parse_news_page_to_get_news_urls()
-        tasks = [asyncio.create_task(self.get_image_urls(news_url=news_url)) for news_url in self.news_urls]
+        tasks = [asyncio.create_task(self.get_image_urls(news_url=news_url, semaphore=semaphore))
+                 for news_url in self.news_urls]
         await asyncio.gather(*tasks)
         return self.news_urls
 
