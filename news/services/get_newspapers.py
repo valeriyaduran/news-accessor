@@ -8,14 +8,15 @@ from aiohttp import ClientSession, TCPConnector
 from bs4 import BeautifulSoup
 from loguru import logger
 
+from news.config import base_newspaper_url, partial_newspaper_url
 from news.handlers.exception_handler import RequestSleep
 from news.services.fill_in_news_db import insert_newspapers_data_into_news_db
 
 
 class Newspaper:
     def __init__(self) -> None:
-        self.base_url: str = "https://news.google.com/newspapers"
-        self.partial_newspaper_url: str = "https://news.google.com/newspapers?nid="
+        self.base_url: str = base_newspaper_url
+        self.partial_newspaper_url: str = partial_newspaper_url
         self.news_urls: dict = {}
         self.max_left_retries: int = 5
 

@@ -1,9 +1,9 @@
 from aiohttp import web
 
-from news import views
+from news.routes import routes
 
 app = web.Application()
-app.router.add_get("/", views.index)
+app.add_routes(routes=routes)
 
 
 if __name__ == "__main__":
